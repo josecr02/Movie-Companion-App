@@ -20,21 +20,21 @@ const Saved = () => {
         </View>
       ) : (
           <ScrollView className="flex-1 px-5 pt-10" showsVerticalScrollIndicator={false}>
-          <Text className="text-xl text-white font-bold mt-5 mb-3">My Watchlist</Text>
-          <FlatList
-            data={savedMovies}
-            keyExtractor={(item) => item.id.toString()}
-            numColumns={3}
-            renderItem={({ item }) => <MovieCard {...item} />}
-            columnWrapperStyle={{
-                justifyContent: 'flex-start',
-                gap: 20,
-                paddingRight: 5,
-                marginBottom: 10
-              }}
-            className="mt-2 pb-32"
-            scrollEnabled={false}
-          />
+            <Text className="text-xl text-white font-bold mt-5 mb-3">My Watchlist</Text>
+            <FlatList
+              data={savedMovies}
+              keyExtractor={(item) => item.id.toString()}
+              numColumns={3}
+              renderItem={({ item }) => <MovieCard {...item} />}
+              columnWrapperStyle={{
+                  justifyContent: 'flex-start',
+                  gap: 20,
+                  paddingRight: 5,
+                  marginBottom: 10
+                }}
+              className="mt-2 pb-32"
+              scrollEnabled={false}
+            />
         </ScrollView>
       )}
     </View>

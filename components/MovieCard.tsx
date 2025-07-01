@@ -1,21 +1,30 @@
 import { icons } from '@/constants/icons';
+import { Movie } from '@/interfaces/interfaces';
 import { Link } from 'expo-router';
 import React from 'react';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { useSavedMovies } from './SavedMoviesContext';
-import { Movie } from '@/interfaces/interfaces';
 
 
 const MovieCard = (movie: Movie) => {
   const { id, poster_path, title, vote_average, release_date } = movie;
-  const { saveMovie, unsaveMovie, isMovieSaved } = useSavedMovies();
+  const { saveMovie, unsaveMovie, isMovieSaved, favoriteMovie, unfavoriteMovie, isMovieFavorited } = useSavedMovies();
   const saved = isMovieSaved(id.toString());
+  const favorited = isMovieFavorited(id.toString());
 
   const handleSave = () => {
     if (saved) {
       unsaveMovie(id.toString());
     } else {
       saveMovie(movie);
+    }
+  };
+
+  const handleFavorite = () => {
+    if (favorited) {
+      unfavoriteMovie(id.toString());
+    } else {
+      favoriteMovie(movie);
     }
   };
 
@@ -40,9 +49,14 @@ const MovieCard = (movie: Movie) => {
           <Text className="text-xs text-light-300 font-medium mt-1">
             {release_date?.split('-')[0]}
           </Text>
-          <TouchableOpacity onPress={handleSave} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-            <Image source={icons.save} className="size-4" tintColor={saved ? '#FFD700' : '#fff'} />
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-x-2">
+            <TouchableOpacity onPress={handleFavorite} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+              <Image source={icons.star} className="size-4" tintColor={favorited ? '#FFD700' : '#fff'} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleSave} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+              <Image source={icons.save} className="size-4" tintColor={saved ? '#FFD700' : '#fff'} />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     </Link>

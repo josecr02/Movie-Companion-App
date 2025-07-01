@@ -1,3 +1,4 @@
+
 export const TMDB_CONFIG = {
     BASE_URL: 'https://api.themoviedb.org/3',
     API_KEY: process.env.EXPO_PUBLIC_MOVIE_API_KEY,
@@ -6,6 +7,25 @@ export const TMDB_CONFIG = {
         Authorization: `Bearer ${process.env.EXPO_PUBLIC_MOVIE_API_KEY}`
     }
 }
+
+// Fetch where to watch info for a movie (providers)
+export const fetchMovieWatchProviders = async (movieId: string, countryCode: string = 'US') => {
+    try {
+        const response = await fetch(`${TMDB_CONFIG.BASE_URL}/movie/${movieId}/watch/providers?api_key=${TMDB_CONFIG.API_KEY}`,
+            {
+                method: 'GET',
+                headers: TMDB_CONFIG.headers,
+            }
+        );
+        if (!response.ok) throw new Error('Failed to fetch watch providers');
+        const data = await response.json();
+        // Return only the providers for the given country code
+        return data.results?.[countryCode]?.flatrate || [];
+    } catch (error) {
+        console.log(error);
+        throw error;
+    }
+};
 
 export const fetchMovies = async ({ query }: {query: string}) => {
     const endpoint = query

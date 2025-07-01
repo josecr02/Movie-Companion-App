@@ -1,5 +1,6 @@
+import { useSavedMovies } from '@/components/SavedMoviesContext';
 import { icons } from '@/constants/icons';
-import { fetchMovieDetails } from '@/services/api';
+import { fetchMovieDetails, fetchMovieWatchProviders } from '@/services/api';
 import useFetch from '@/services/useFetch';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
@@ -22,6 +23,9 @@ const MovieDetails = () => {
 
   const {data: movie, loading} = useFetch(() =>
     fetchMovieDetails(id as string));
+  const {data: providers, loading: loadingProviders} = useFetch(() =>
+    fetchMovieWatchProviders(id as string, 'CA'), !!id);
+  const { saveMovie, unsaveMovie, isMovieSaved } = useSavedMovies();
   
   return (
     <View className="bg-primary flex-1">
@@ -38,14 +42,64 @@ const MovieDetails = () => {
             <Text className='text-light-200 text-sm'>{movie?.runtime}m</Text>
           </View>
 
-          <View className='flex-row items-center bg-dark-100 px-2 py-1 rounded-md gap-x-1 mt-2'>
-            <Image source={icons.star} className='size-4'/>
-            <Text className="text-white font-bold text-sm">
-              {Math.round(movie?.vote_average ?? 0)}/10
-            </Text>
-            <Text className="text-light-200 text-sm">
-              ({movie?.vote_count} votes)
-            </Text>
+          <View className='flex-row items-center gap-x-2 mt-2'>
+            <View className='flex-row items-center bg-dark-100 px-2 py-1 rounded-md gap-x-1'>
+              <Image source={icons.star} className='size-4'/>
+              <Text className="text-white font-bold text-sm">
+                {Math.round(movie?.vote_average ?? 0)}/10
+              </Text>
+              <Text className="text-light-200 text-sm">
+                ({movie?.vote_count} votes)
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                if (!movie) return;
+                if (isMovieSaved(movie.id.toString())) {
+                  unsaveMovie(movie.id.toString());
+                } else {
+                  // Save only the fields needed for the watchlist
+                  saveMovie({
+                    id: movie.id,
+                    title: movie.title,
+                    poster_path: movie.poster_path,
+                    vote_average: movie.vote_average,
+                    release_date: movie.release_date,
+                    // fallback for other fields if needed
+                  } as any);
+                }
+              }}
+              className="ml-2 px-3 py-1 bg-accent rounded-md flex-row items-center"
+            >
+              <Image source={icons.save} className="size-4 mr-1" tintColor={isMovieSaved(movie?.id?.toString()) ? '#FFD700' : '#fff'} />
+              <Text className="text-white text-xs font-semibold">
+                {isMovieSaved(movie?.id?.toString()) ? 'Saved' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+
+          {/* Where to Watch Section */}
+          <View className="mt-5 w-full">
+            <Text className="text-white font-semibold text-base mb-2">Where to Watch</Text>
+            {loadingProviders ? (
+              <Text className="text-light-200">Loading...</Text>
+            ) : providers && providers.length > 0 ? (
+              <View className="flex-row gap-x-4 items-center">
+                {providers.map((provider: any) => (
+                  <View key={provider.provider_id} className="items-center">
+                    <Image
+                      source={{ uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}` }}
+                      className="w-10 h-10 rounded-full mb-1"
+                      resizeMode="contain"
+                    />
+                    <Text className="text-xs text-white text-center w-16" numberOfLines={2}>{provider.provider_name}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className="text-light-200">Not available for streaming in Canada</Text>
+            )}
           </View>
 
           <MovieInfo label="Overview" value={movie?.overview}/>
