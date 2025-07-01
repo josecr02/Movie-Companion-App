@@ -1,3 +1,13 @@
+// Fetch recommended movies for a given movieId
+export const fetchMovieRecommendations = async (movieId: string) => {
+    const response = await fetch(
+        `${TMDB_CONFIG.BASE_URL}/movie/${movieId}/recommendations?api_key=${TMDB_CONFIG.API_KEY}`,
+        { headers: TMDB_CONFIG.headers }
+    );
+    if (!response.ok) throw new Error('Failed to fetch recommendations');
+    const data = await response.json();
+    return data.results;
+};
 // Fetch the trailer for a movie (YouTube)
 export const fetchMovieTrailer = async (movieId: string) => {
     const response = await fetch(
