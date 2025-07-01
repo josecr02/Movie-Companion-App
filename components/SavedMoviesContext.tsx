@@ -18,6 +18,7 @@ const SavedMoviesContext = createContext<SavedMoviesContextType | undefined>(und
 export const SavedMoviesProvider = ({ children }: { children: ReactNode }) => {
   const [savedMovies, setSavedMovies] = useState<Movie[]>([]);
   const [favoriteMovies, setFavoriteMovies] = useState<Movie[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   // Load saved and favorite movies from AsyncStorage on mount
   useEffect(() => {
@@ -29,18 +30,24 @@ export const SavedMoviesProvider = ({ children }: { children: ReactNode }) => {
         if (favJson) setFavoriteMovies(JSON.parse(favJson));
       } catch (e) {
         // handle error if needed
+      } finally {
+        setLoaded(true);
       }
     };
     loadMovies();
   }, []);
 
-  // Save to AsyncStorage whenever savedMovies or favoriteMovies changes
+  // Save to AsyncStorage whenever savedMovies or favoriteMovies changes, but only after initial load
   useEffect(() => {
-    AsyncStorage.setItem('savedMovies', JSON.stringify(savedMovies));
-  }, [savedMovies]);
+    if (loaded) {
+      AsyncStorage.setItem('savedMovies', JSON.stringify(savedMovies));
+    }
+  }, [savedMovies, loaded]);
   useEffect(() => {
-    AsyncStorage.setItem('favoriteMovies', JSON.stringify(favoriteMovies));
-  }, [favoriteMovies]);
+    if (loaded) {
+      AsyncStorage.setItem('favoriteMovies', JSON.stringify(favoriteMovies));
+    }
+  }, [favoriteMovies, loaded]);
   // Favorite logic
   const favoriteMovie = (movie: Movie) => {
     setFavoriteMovies((prev) => (prev.find((m) => m.id === movie.id) ? prev : [...prev, movie]));

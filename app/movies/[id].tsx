@@ -4,7 +4,7 @@ import { fetchMovieDetails, fetchMovieWatchProviders } from '@/services/api';
 import useFetch from '@/services/useFetch';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 interface MovieInfoProps {
   label: string,
@@ -85,9 +85,13 @@ const MovieDetails = () => {
             {loadingProviders ? (
               <Text className="text-light-200">Loading...</Text>
             ) : providers && providers.length > 0 ? (
-              <View className="flex-row gap-x-4 items-center">
-                {providers.map((provider: any) => (
-                  <View key={provider.provider_id} className="items-center">
+              <FlatList
+                data={providers}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(provider) => provider.provider_id.toString()}
+                renderItem={({ item: provider }) => (
+                  <View className="items-center mr-4">
                     <Image
                       source={{ uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}` }}
                       className="w-10 h-10 rounded-full mb-1"
@@ -95,8 +99,9 @@ const MovieDetails = () => {
                     />
                     <Text className="text-xs text-white text-center w-16" numberOfLines={2}>{provider.provider_name}</Text>
                   </View>
-                ))}
-              </View>
+                )}
+                contentContainerStyle={{ alignItems: 'center' }}
+              />
             ) : (
               <Text className="text-light-200">Not available for streaming in Canada</Text>
             )}
