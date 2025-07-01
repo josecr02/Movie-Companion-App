@@ -1,10 +1,11 @@
 import { useSavedMovies } from '@/components/SavedMoviesContext';
 import { icons } from '@/constants/icons';
-import { fetchMovieDetails, fetchMovieWatchProviders } from '@/services/api';
+import { fetchMovieDetails, fetchMovieTrailer, fetchMovieWatchProviders } from '@/services/api';
 import useFetch from '@/services/useFetch';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { FlatList, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 
 interface MovieInfoProps {
   label: string,
@@ -26,7 +27,10 @@ const MovieDetails = () => {
   const {data: providers, loading: loadingProviders} = useFetch(() =>
     fetchMovieWatchProviders(id as string, 'CA'), !!id);
   const { saveMovie, unsaveMovie, isMovieSaved } = useSavedMovies();
-  
+  const { data: trailer } = useFetch(() => fetchMovieTrailer(id as string), !!id);
+
+  const [showTrailer, setShowTrailer] = React.useState(false);
+
   return (
     <View className="bg-primary flex-1">
       <ScrollView contentContainerStyle={{
@@ -35,6 +39,7 @@ const MovieDetails = () => {
         <View>
           <Image source={{ uri: `https://image.tmdb.org/t/p/w500${movie?.poster_path}`}} className="w-full h-[550px]" resizeMode='stretch'/>
         </View>
+
         <View className="flex-col items-start justify-center mt-5 px-5">
           <Text className="text-white font-bold text-xl">{movie?.title}</Text>
           <View className="flex-row items-center gap-x-1 mt-2">
@@ -106,6 +111,49 @@ const MovieDetails = () => {
               <Text className="text-light-200">Not available for streaming in Canada</Text>
             )}
           </View>
+
+
+
+          {/* Trailer Section */}
+          <Text className="text-white font-semibold text-base mt-3 mb-2">Watch the Trailer</Text>
+          {trailer && trailer.key ? (
+            showTrailer ? (
+              <View style={{ height: 220, width: '100%', marginVertical: 16, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' }}>
+                <WebView
+                  source={{ uri: `https://www.youtube.com/watch?v=${trailer.key}` }}
+                  style={{ width: '100%', height: 220, borderRadius: 12, backgroundColor: '#000' }}
+                  allowsFullscreenVideo
+                  javaScriptEnabled
+                  domStorageEnabled
+                  mediaPlaybackRequiresUserAction={true}
+                  onError={e => {
+                    console.warn('WebView error:', e.nativeEvent);
+                  }}
+                  onHttpError={e => {
+                    console.warn('WebView HTTP error:', e.nativeEvent);
+                  }}
+                />
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={{ height: 220, width: '100%', marginVertical: 16, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}
+                activeOpacity={0.8}
+                onPress={() => setShowTrailer(true)}
+              >
+                <Image
+                  source={{ uri: `https://image.tmdb.org/t/p/w500${movie?.backdrop_path || movie?.poster_path}` }}
+                  style={{ position: 'absolute', width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                />
+                <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 32, padding: 16 }}>
+                  <Image source={icons.play} style={{ width: 40, height: 40, tintColor: '#fff' }} />
+                </View>
+              </TouchableOpacity>
+            )
+          ) : (
+            <Text className="text-light-200 mt-4 mb-2">No trailer available.</Text>
+          )}
+
 
           <MovieInfo label="Overview" value={movie?.overview}/>
 

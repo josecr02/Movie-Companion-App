@@ -1,3 +1,16 @@
+// Fetch the trailer for a movie (YouTube)
+export const fetchMovieTrailer = async (movieId: string) => {
+    const response = await fetch(
+        `${TMDB_CONFIG.BASE_URL}/movie/${movieId}/videos?api_key=${TMDB_CONFIG.API_KEY}`,
+        { headers: TMDB_CONFIG.headers }
+    );
+    if (!response.ok) throw new Error('Failed to fetch trailer');
+    const data = await response.json();
+    // Find the first YouTube trailer
+    return data.results.find(
+        (video: any) => video.site === 'YouTube' && video.type === 'Trailer'
+    );
+};
 
 export const TMDB_CONFIG = {
     BASE_URL: 'https://api.themoviedb.org/3',
@@ -66,6 +79,8 @@ export const fetchMovieDetails = async (movieId: string): Promise<MovieDetails> 
         throw error;
     }
 }
+
+
 
 
 
