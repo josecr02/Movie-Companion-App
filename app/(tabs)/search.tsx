@@ -3,18 +3,37 @@ import SearchBar from '@/components/SearchBar'
 import { icons } from '@/constants/icons'
 import { images } from '@/constants/images'
 import { fetchMovies } from '@/services/api'
+import { updateSearchCount } from '@/services/appwrite'
 import useFetch from '@/services/useFetch'
-import { Text } from '@react-navigation/elements'
-import { useRouter } from 'expo-router'
-import React from 'react'
-import { ActivityIndicator, FlatList, Image, View } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { ActivityIndicator, FlatList, Image, Text, View } from 'react-native'
 
 const Search = () => {
-  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: movies, loading, error} = useFetch(() => fetchMovies({
-    query: ''
-  }))
+  const { data: movies, loading, error, refetch: loadMovies, reset} = useFetch(() => fetchMovies({
+    query: searchQuery
+  }), false) // false for no auto fetch
+
+
+  // we debounce, by wrapping in a time out function!
+  useEffect(() => {
+    
+    const timeoutId = setTimeout(async () => {
+      if (searchQuery.trim()) {
+        await loadMovies();
+      } else {
+        reset()
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (movies?.length > 0 && movies?.[0])
+      updateSearchCount(searchQuery, movies[0]);
+  }, [movies])
 
   return ( // 1.54
     
@@ -40,7 +59,10 @@ const Search = () => {
             </View>
 
             <View className='my-5'>
-              <SearchBar placeholder='Search movies'/>
+              <SearchBar placeholder='Search movies'
+                value={searchQuery}
+                onChangeText={(text: string) => setSearchQuery(text)}
+              />
             </View>
 
             {loading && (
@@ -51,13 +73,22 @@ const Search = () => {
               <Text className="text-red-500 px-5 my-3">Error: {error.message}</Text>
             )}
 
-            {!loading && !error && 'SEARCH TERM'.trim() && movies?.length > 0 && (
-              <Text className="text-white">
-                Search Results for {' '}
-                <Text className="text-accent">SEARCH TERM</Text>
+            {!loading && !error && searchQuery.trim() && movies?.length > 0 && (
+              <Text className="text-white text-xl font-bold">
+                Search Results for {''}
+                <Text className="text-accent">{searchQuery}</Text>
               </Text>
             )}
           </>
+        }
+        ListEmptyComponent={
+          !loading && !error ? (
+            <View className="mt-10 px-5">
+              <Text className="text-center text-gray-500">
+                {searchQuery.trim() ? 'No movies found' : 'Search for a movie'}
+              </Text>
+            </View>
+          ) : null
         }
       />
     </View>
