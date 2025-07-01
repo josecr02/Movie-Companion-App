@@ -3,7 +3,6 @@ import MovieCard from "@/components/MovieCard";
 import { useSavedMovies } from "@/components/SavedMoviesContext";
 import SearchBar from "@/components/SearchBar";
 import TrendingCard from "@/components/TrendingCard";
-import { icons } from "@/constants/icons";
 import { images } from "@/constants/images";
 import { fetchMovieRecommendations, fetchMovies } from "@/services/api";
 import { getTrendingMovies } from "@/services/appwrite";
@@ -109,7 +108,7 @@ export default function Index() {
       <Image source={images.bg} className="absolute w-full z-0"/>
       <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false} contentContainerStyle={{
         minHeight: "100%", paddingBottom: 10}}>
-          <Image source={icons.logo} className="w-12 h-10 mt-20 mb-5 mx-auto"/>
+          {/* <Image source={icons.logo} className="w-12 h-10 mt-20 mb-5 mx-auto"/> */}
           {moviesLoading || trendingLoading ? (
             <ActivityIndicator
               size="large"
