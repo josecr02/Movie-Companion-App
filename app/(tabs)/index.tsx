@@ -1,7 +1,6 @@
 
 import MovieCard from "@/components/MovieCard";
 import { useSavedMovies } from "@/components/SavedMoviesContext";
-import SearchBar from "@/components/SearchBar";
 import TrendingCard from "@/components/TrendingCard";
 import { images } from "@/constants/images";
 import { fetchMovieRecommendations, fetchMovies } from "@/services/api";
@@ -119,10 +118,10 @@ export default function Index() {
             <Text>Error: {moviesError?.message || trendingError?.message}</Text>
           ) : (
             <View className="flex-1 mt-5">
-              <SearchBar
+              {/* <SearchBar
                 onPress={() => router.push("/search")}
                 placeholder="Search for a movie"
-              />
+              /> */}
 
               {trendingMovies && (
                 <View className="mt-10">

@@ -1,3 +1,14 @@
+// Fetch all available streaming platforms (providers) from TMDb
+export const fetchAllMovieProviders = async (countryCode: string = 'CA') => {
+    const response = await fetch(
+        `${TMDB_CONFIG.BASE_URL}/watch/providers/movie?api_key=${TMDB_CONFIG.API_KEY}&language=en-US&watch_region=${countryCode}`,
+        { headers: TMDB_CONFIG.headers }
+    );
+    if (!response.ok) throw new Error('Failed to fetch movie providers');
+    const data = await response.json();
+    // Returns an array of providers with id, provider_name, logo_path, etc.
+    return data.results;
+};
 // Fetch recommended movies for a given movieId
 export const fetchMovieRecommendations = async (movieId: string) => {
     const response = await fetch(
