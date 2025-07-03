@@ -61,10 +61,15 @@ export const fetchMovieWatchProviders = async (movieId: string, countryCode: str
     }
 };
 
-export const fetchMovies = async ({ query }: {query: string}) => {
-    const endpoint = query
-    ? `${TMDB_CONFIG.BASE_URL}/search/movie?query=${encodeURIComponent(query)}`
-    : `${TMDB_CONFIG.BASE_URL}/discover/movie?sort_by=popularity.desc`;
+export const fetchMovies = async ({ query, nowPlaying = false }: { query: string, nowPlaying?: boolean }) => {
+    let endpoint = '';
+    if (nowPlaying) {
+        endpoint = `${TMDB_CONFIG.BASE_URL}/movie/now_playing?api_key=${TMDB_CONFIG.API_KEY}&language=en-US&page=1&region=CA`;
+    } else if (query) {
+        endpoint = `${TMDB_CONFIG.BASE_URL}/search/movie?query=${encodeURIComponent(query)}`;
+    } else {
+        endpoint = `${TMDB_CONFIG.BASE_URL}/discover/movie?sort_by=popularity.desc`;
+    }
 
     const response = await fetch(endpoint, {
         method: 'GET',
@@ -78,7 +83,7 @@ export const fetchMovies = async ({ query }: {query: string}) => {
     const data = await response.json();
 
     return data.results;
-} // CUSTOM HOOK, 1.19!!!
+}
 
 export const fetchMovieDetails = async (movieId: string): Promise<MovieDetails> => {
     try {

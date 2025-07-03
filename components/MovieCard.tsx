@@ -1,16 +1,47 @@
+
 import { icons } from '@/constants/icons';
 import { Movie } from '@/interfaces/interfaces';
 import { Link } from 'expo-router';
-import React from 'react';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { useSavedMovies } from './SavedMoviesContext';
+import { useUserPlatforms } from './UserPlatformsContext';
+import { fetchMovieWatchProviders } from '@/services/api';
 
 
 const MovieCard = (movie: Movie) => {
   const { id, poster_path, title, vote_average, release_date } = movie;
+
   const { saveMovie, unsaveMovie, isMovieSaved, favoriteMovie, unfavoriteMovie, isMovieFavorited } = useSavedMovies();
   const saved = isMovieSaved(id.toString());
   const favorited = isMovieFavorited(id.toString());
+
+  // Streaming availability state
+  const { selectedPlatforms } = useUserPlatforms();
+  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!selectedPlatforms.length) {
+      setIsAvailable(null);
+      return;
+    }
+    setCheckingAvailability(true);
+    fetchMovieWatchProviders(id.toString(), 'CA')
+      .then((providers) => {
+        if (!isMounted) return;
+        const hasProvider = providers.some((p: any) => selectedPlatforms.includes(p.provider_id));
+        setIsAvailable(hasProvider);
+      })
+      .catch(() => {
+        if (isMounted) setIsAvailable(null);
+      })
+      .finally(() => {
+        if (isMounted) setCheckingAvailability(false);
+      });
+    return () => { isMounted = false; };
+  }, [id, selectedPlatforms]);
 
   const handleSave = () => {
     if (saved) {
@@ -44,6 +75,16 @@ const MovieCard = (movie: Movie) => {
         <View className="flex-row items-center justify-start gap-x-1">
           <Image source={icons.star} className="size-4"/>
           <Text className="text-xs text-white font-bold uppercase">{Math.round(vote_average / 2)}</Text>
+          {checkingAvailability ? (
+            <ActivityIndicator size="small" color="#FFD700" style={{ marginLeft: 2 }} />
+          ) : isAvailable !== null ? (
+            <Image
+              source={isAvailable ? icons.green_checkmark_internet : icons.red_crossmark_internet}
+              className="size-4"
+              style={{ marginLeft: 2 }}
+              accessibilityLabel={isAvailable ? 'Available on your platforms' : 'Not available on your platforms'}
+            />
+          ) : null}
         </View>
         <View className="flex-row items-center justify-between">
           <Text className="text-xs text-light-300 font-medium mt-1">

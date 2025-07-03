@@ -37,6 +37,7 @@ import IndexScreen from './index';
 import ProfileScreen from './profile';
 import SavedScreen from './saved';
 import SearchScreen from './search';
+import InTheatresScreen from './intheatres';
 
 const Tab = createMaterialTopTabNavigator();
 
@@ -75,6 +76,13 @@ const _layout = () => {
         component={SearchScreen}
         options={{
           tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.search} title="Search" />,
+        }}
+      />
+      <Tab.Screen
+        name="InTheatres"
+        component={InTheatresScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.tickets} title="In Theatres" />,
         }}
       />
       <Tab.Screen
