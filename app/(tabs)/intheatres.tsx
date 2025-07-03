@@ -1,9 +1,9 @@
 
 
 import CinemaCard from '@/components/CinemaCard';
+import { images } from '@/constants/images';
 import { fetchMovies } from '@/services/api';
 import useFetch from '@/services/useFetch';
-import { images } from '@/constants/images';
 import React from 'react';
 import { ActivityIndicator, FlatList, Image, Text, View } from 'react-native';
 
