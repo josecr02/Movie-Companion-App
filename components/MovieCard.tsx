@@ -59,11 +59,11 @@ const MovieCard = (movie: Movie) => {
     }
   };
 
-  const handleSelectWatchlist = (watchlistId: string) => {
+  const handleSelectWatchlist = async (watchlistId: string) => {
     if (watchlistId === 'personal') {
       saveMovie(movie);
     } else {
-      addMovieToWatchlist(watchlistId, movie);
+      await addMovieToWatchlist(watchlistId, movie.id.toString());
     }
     setShowWatchlistModal(false);
   };

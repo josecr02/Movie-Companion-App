@@ -38,10 +38,11 @@ import ProfileScreen from './profile';
 import SavedScreen from './saved';
 import SearchScreen from './search';
 import InTheatresScreen from './intheatres';
-
+import MatchScreen from './match';
+import SharedScreen from './shared';
 const Tab = createMaterialTopTabNavigator();
 
-const _layout = () => {
+const Layout = () => {
   const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
@@ -94,9 +95,16 @@ const _layout = () => {
       />
       <Tab.Screen
         name="Shared"
-        component={require('./shared').default}
+        component={SharedScreen}
         options={{
           tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.person} title="Shared" />,
+        }}
+      />
+      <Tab.Screen
+        name="Match"
+        component={MatchScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.tickets} title="Match!" />,
         }}
       />
       <Tab.Screen
@@ -110,4 +118,4 @@ const _layout = () => {
   );
 };
 
-export default _layout
+export default Layout;

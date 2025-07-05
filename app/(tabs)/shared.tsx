@@ -1,10 +1,11 @@
 import MovieCard from '@/components/MovieCard';
 import { images } from '@/constants/images';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FlatList, Image, Text, View, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 
 import { useSharedWatchlists } from '@/components/SharedWatchlistsContext';
 import { checkUsernameExists } from '@/services/appwrite';
+import { fetchMoviesByIds } from '@/services/tmdb';
 
 const Shared = () => {
   const { watchlists, inviteToWatchlist, addMovieToWatchlist, createWatchlist, refresh } = useSharedWatchlists();
@@ -19,6 +20,29 @@ const Shared = () => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState('');
   const currentList = watchlists.find(w => w.id === selected);
+
+  // State for fetched movie objects
+  const [watchlistMovies, setWatchlistMovies] = useState<any[]>([]);
+  const [moviesLoading, setMoviesLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchMovies = async () => {
+      if (!currentList || !currentList.movies_ids.length) {
+        setWatchlistMovies([]);
+        return;
+      }
+      setMoviesLoading(true);
+      try {
+        const movies = await fetchMoviesByIds(currentList.movies_ids);
+        setWatchlistMovies(movies);
+      } catch {
+        setWatchlistMovies([]);
+      } finally {
+        setMoviesLoading(false);
+      }
+    };
+    fetchMovies();
+  }, [currentList]);
 
   // Update selected when watchlists change
   React.useEffect(() => {
@@ -139,20 +163,20 @@ const Shared = () => {
             ))}
           </View>
         )}
-        {/* Movies: You will need to fetch movie details by ID if you want to display more than just IDs */}
-        <FlatList
-          data={currentList?.movies_ids || []}
-          renderItem={({ item }) => (
-            <View style={{ backgroundColor: '#222', borderRadius: 8, padding: 8, margin: 4 }}>
-              <Text style={{ color: '#FFD700', fontSize: 13 }}>Movie ID: {item}</Text>
-            </View>
-          )}
-          keyExtractor={item => item}
-          numColumns={3}
-          columnWrapperStyle={{ justifyContent: 'flex-start', gap: 20, paddingRight: 5, marginBottom: 10 }}
-          className="mt-2"
-          ListEmptyComponent={<Text className="text-gray-400 mt-10">No movies in this watchlist yet.</Text>}
-        />
+        {/* Movies: Show MovieCard for each movie in the watchlist */}
+        {moviesLoading ? (
+          <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 30 }} />
+        ) : (
+          <FlatList
+            data={watchlistMovies}
+            renderItem={({ item }) => <MovieCard {...item} />}
+            keyExtractor={item => item.id.toString()}
+            numColumns={3}
+            columnWrapperStyle={{ justifyContent: 'flex-start', gap: 20, paddingRight: 5, marginBottom: 10 }}
+            className="mt-2"
+            ListEmptyComponent={<Text className="text-gray-400 mt-10">No movies in this watchlist yet.</Text>}
+          />
+        )}
         {/* Invite Modal */}
         <Modal
           visible={inviteModalVisible}
