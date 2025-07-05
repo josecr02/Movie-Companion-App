@@ -5,6 +5,8 @@ import { database } from '@/services/appwrite';
 import { getLocalUsername } from '@/services/localUser';
 import * as matchesApi from '@/services/matches';
 import { fetchMoviesByIds } from '@/services/tmdb';
+import { fetchRandomPopularMovieIds } from '@/services/randomMovies';
+import { fetchGenresForMovies, discoverMovieByGenres } from '@/services/smartMatch';
 import MovieCard from '@/components/MovieCard';
 
 const NUM_MOVIES = 12;
@@ -68,6 +70,8 @@ const MatchTab = () => {
     }
   }, [match, currentUser]);
 
+
+
   // Invite user to match
   const handleInvite = async () => {
     setInviteError('');
@@ -76,10 +80,10 @@ const MatchTab = () => {
       return;
     }
     setLoading(true);
-    // Pick 12 random movie IDs (for demo, use hardcoded popular IDs)
-    const demoIds = ["603692", "872585", "787699", "940551", "438631", "823464", "572802", "438148", "823855", "940721", "634492", "872906"];
     try {
-      const matchDoc = await matchesApi.createMatch(database, currentUser, invitee.trim(), demoIds);
+      // Fetch 12 random movie IDs from TMDb
+      const initiatorIds = await fetchRandomPopularMovieIds(NUM_MOVIES);
+      const matchDoc = await matchesApi.createMatch(database, currentUser, invitee.trim(), initiatorIds);
       setMatchId(matchDoc.$id);
       setMatch(matchDoc);
       setStep('waiting');
@@ -94,10 +98,10 @@ const MatchTab = () => {
   const handleAccept = async () => {
     if (!match || !currentUser) return;
     setLoading(true);
-    // Pick 12 random movie IDs (for demo, use same as above)
-    const demoIds = ["603692", "872585", "787699", "940551", "438631", "823464", "572802", "438148", "823855", "940721", "634492", "872906"];
     try {
-      await matchesApi.acceptMatch(database, match.$id, demoIds);
+      // Fetch 12 random movie IDs from TMDb for invitee
+      const inviteeIds = await fetchRandomPopularMovieIds(NUM_MOVIES);
+      await matchesApi.acceptMatch(database, match.$id, inviteeIds);
       setStep('matching');
     } finally {
       setLoading(false);
@@ -112,14 +116,53 @@ const MatchTab = () => {
       await matchesApi.submitAnswer(database, match.$id, currentUser, answer);
       setAnswers([...answers, answer]);
       setAnsweringIndex(answeringIndex + 1);
-      // If last movie, finish
+      // If last movie, wait for both users to finish
       if (answeringIndex + 1 === NUM_MOVIES) {
-        // For demo, just pick the first movie both users liked/loved
-        // In real app, fetch both users' answers and compute best match
-        setStep('result');
-        // Fetch result movie (for demo, just pick first movie)
-        setResultMovie(movies[0]);
-        await matchesApi.finishMatch(database, match.$id, movies[0]?.id?.toString() || '');
+        // Poll for both users' answers
+        let done = false;
+        let resultMovieId = null;
+        while (!done) {
+          const updatedMatch = await matchesApi.getMatch(database, match.$id);
+          const initiatorDone = updatedMatch.initiator_answers.length === NUM_MOVIES;
+          const inviteeDone = updatedMatch.invitee_answers.length === NUM_MOVIES;
+          // Only proceed if both finished
+          if (initiatorDone && inviteeDone) {
+            // Smart match: find a new movie by genre profile
+            const initiatorLikes = updatedMatch.initiator_answers.map((a, i) => (a === 'love' || a === 'like') ? updatedMatch.initiator_movies[i] : null).filter(Boolean) as string[];
+            const inviteeLikes = updatedMatch.invitee_answers.map((a, i) => (a === 'love' || a === 'like') ? updatedMatch.invitee_movies[i] : null).filter(Boolean) as string[];
+            const allLiked = Array.from(new Set([...initiatorLikes, ...inviteeLikes]));
+            // Get top genres from liked movies
+            let genres: number[] = [];
+            if (allLiked.length > 0) {
+              genres = await fetchGenresForMovies(allLiked);
+            }
+            // Exclude all movies shown in this session
+            const excludeIds = Array.from(new Set([
+              ...updatedMatch.initiator_movies,
+              ...updatedMatch.invitee_movies
+            ]));
+            // Discover a new movie by genres
+            let smartMatch: any = null;
+            if (genres.length > 0) {
+              smartMatch = await discoverMovieByGenres(genres, excludeIds);
+            }
+            // Fallback: pick any liked movie, or any shown movie
+            resultMovieId = smartMatch?.id?.toString() || initiatorLikes[0] || inviteeLikes[0] || updatedMatch.initiator_movies[0];
+            await matchesApi.finishMatch(database, match.$id, resultMovieId);
+            done = true;
+            // Set result movie
+            if (smartMatch) {
+              setResultMovie(smartMatch);
+            } else {
+              const movieObj = movies.find(m => m.id.toString() === resultMovieId) || movies[0];
+              setResultMovie(movieObj);
+            }
+            setStep('result');
+          } else {
+            // Wait and poll again
+            await new Promise(res => setTimeout(res, 1500));
+          }
+        }
       }
     } finally {
       setLoading(false);
@@ -165,6 +208,15 @@ const MatchTab = () => {
   }
   if (step === 'matching' && movies.length > 0) {
     const movie = movies[answeringIndex];
+    // If finished, show waiting screen
+    if (answeringIndex >= NUM_MOVIES) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#181A2A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 20, marginBottom: 10 }}>Waiting for your match...</Text>
+          <ActivityIndicator size="large" color="#FFD700" />
+        </View>
+      );
+    }
     return (
       <View style={{ flex: 1, backgroundColor: '#181A2A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
         <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 20, marginBottom: 10 }}>Movie {answeringIndex + 1} of {NUM_MOVIES}</Text>
@@ -192,6 +244,24 @@ const MatchTab = () => {
         <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 22, marginBottom: 18 }}>Your Movie Match!</Text>
         <MovieCard {...resultMovie} />
         <Text style={{ color: 'white', fontSize: 18, marginTop: 18 }}>Enjoy your movie night!</Text>
+        <TouchableOpacity
+          style={{ marginTop: 30, backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 32 }}
+          onPress={() => {
+            // Reset all state to start a new match
+            setStep('idle');
+            setInvitee('');
+            setInviteError('');
+            setMatchId(null);
+            setMatch(null);
+            setMovies([]);
+            setLoading(false);
+            setAnsweringIndex(0);
+            setAnswers([]);
+            setResultMovie(null);
+          }}
+        >
+          <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 18 }}>Start Another Match</Text>
+        </TouchableOpacity>
       </View>
     );
   }
