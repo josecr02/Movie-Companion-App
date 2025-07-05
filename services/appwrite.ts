@@ -1,13 +1,15 @@
+
 import { Client, Databases, ID, Query } from "react-native-appwrite";
+import { checkUsernameExists as checkUsernameExistsRaw } from './usernames';
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
 
 const client = new Client()
     .setEndpoint('https://nyc.cloud.appwrite.io/v1')
-    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!)
+    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
 
-const database = new Databases(client);
+export const database = new Databases(client);
 
 export const updateSearchCount = async (query: string, movie: Movie) => {
     try {
@@ -58,8 +60,14 @@ export const getTrendingMovies = async (): Promise<TrendingMovie[] | undefined> 
 
         return result.documents as unknown as TrendingMovie[];
 
+
     } catch (error) {
         console.log(error);
         return undefined;
     }
+}
+
+// Check if a username exists in the Appwrite users collection
+export async function checkUsernameExists(username: string): Promise<boolean> {
+  return checkUsernameExistsRaw(database, username);
 }

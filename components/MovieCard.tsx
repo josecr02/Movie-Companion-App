@@ -7,6 +7,8 @@ import { Image, Text, TouchableOpacity, View, ActivityIndicator } from 'react-na
 import { useSavedMovies } from './SavedMoviesContext';
 import { useUserPlatforms } from './UserPlatformsContext';
 import { fetchMovieWatchProviders } from '@/services/api';
+import { useSharedWatchlists } from './SharedWatchlistsContext';
+import SelectWatchlistModal from './SelectWatchlistModal';
 
 
 const MovieCard = (movie: Movie) => {
@@ -43,13 +45,30 @@ const MovieCard = (movie: Movie) => {
     return () => { isMounted = false; };
   }, [id, selectedPlatforms]);
 
+
+  const { watchlists, addMovieToWatchlist } = useSharedWatchlists();
+  const [showWatchlistModal, setShowWatchlistModal] = useState(false);
+
   const handleSave = () => {
     if (saved) {
       unsaveMovie(id.toString());
+    } else if (watchlists && watchlists.length > 0) {
+      setShowWatchlistModal(true);
     } else {
       saveMovie(movie);
     }
   };
+
+  const handleSelectWatchlist = (watchlistId: string) => {
+    if (watchlistId === 'personal') {
+      saveMovie(movie);
+    } else {
+      addMovieToWatchlist(watchlistId, movie);
+    }
+    setShowWatchlistModal(false);
+  };
+
+  // Remove duplicate declaration
 
   const handleFavorite = () => {
     if (favorited) {
@@ -60,47 +79,55 @@ const MovieCard = (movie: Movie) => {
   };
 
   return (
-    <Link href={`/movies/${id}`} asChild>
-      <TouchableOpacity className="w-[30%]">
-        <Image
-          source={{
-            uri: poster_path
-              ? `https://image.tmdb.org/t/p/w500${poster_path}`
-              : `https://placehold.co/600x400/1a1a1a/ffffff.png`
-          }}
-          className="w-full h-52 rounded-lg"
-          resizeMode="cover"
-        />
-        <Text className="text-sm font-bold text-white mt-2" numberOfLines={1}>{title}</Text>
-        <View className="flex-row items-center justify-start gap-x-1">
-          <Image source={icons.star} className="size-4"/>
-          <Text className="text-xs text-white font-bold uppercase">{Math.round(vote_average / 2)}</Text>
-          {checkingAvailability ? (
-            <ActivityIndicator size="small" color="#FFD700" style={{ marginLeft: 2 }} />
-          ) : isAvailable !== null ? (
-            <Image
-              source={isAvailable ? icons.green_checkmark_internet : icons.red_crossmark_internet}
-              className="size-4"
-              style={{ marginLeft: 2 }}
-              accessibilityLabel={isAvailable ? 'Available on your platforms' : 'Not available on your platforms'}
-            />
-          ) : null}
-        </View>
-        <View className="flex-row items-center justify-between">
-          <Text className="text-xs text-light-300 font-medium mt-1">
-            {release_date?.split('-')[0]}
-          </Text>
-          <View className="flex-row items-center gap-x-2">
-            <TouchableOpacity onPress={handleFavorite} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-              <Image source={icons.star} className="size-4" tintColor={favorited ? '#FFD700' : '#fff'} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSave} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-              <Image source={icons.save} className="size-4" tintColor={saved ? '#FFD700' : '#fff'} />
-            </TouchableOpacity>
+    <>
+      <Link href={`/movies/${id}`} asChild>
+        <TouchableOpacity className="w-[30%]">
+          <Image
+            source={{
+              uri: poster_path
+                ? `https://image.tmdb.org/t/p/w500${poster_path}`
+                : `https://placehold.co/600x400/1a1a1a/ffffff.png`
+            }}
+            className="w-full h-52 rounded-lg"
+            resizeMode="cover"
+          />
+          <Text className="text-sm font-bold text-white mt-2" numberOfLines={1}>{title}</Text>
+          <View className="flex-row items-center justify-start gap-x-1">
+            <Image source={icons.star} className="size-4"/>
+            <Text className="text-xs text-white font-bold uppercase">{Math.round(vote_average / 2)}</Text>
+            {checkingAvailability ? (
+              <ActivityIndicator size="small" color="#FFD700" style={{ marginLeft: 2 }} />
+            ) : isAvailable !== null ? (
+              <Image
+                source={isAvailable ? icons.green_checkmark_internet : icons.red_crossmark_internet}
+                className="size-4"
+                style={{ marginLeft: 2 }}
+                accessibilityLabel={isAvailable ? 'Available on your platforms' : 'Not available on your platforms'}
+              />
+            ) : null}
           </View>
-        </View>
-      </TouchableOpacity>
-    </Link>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-xs text-light-300 font-medium mt-1">
+              {release_date?.split('-')[0]}
+            </Text>
+            <View className="flex-row items-center gap-x-2">
+              <TouchableOpacity onPress={handleFavorite} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <Image source={icons.star} className="size-4" tintColor={favorited ? '#FFD700' : '#fff'} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleSave} className="p-1" hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <Image source={icons.save} className="size-4" tintColor={saved ? '#FFD700' : '#fff'} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Link>
+      <SelectWatchlistModal
+        visible={showWatchlistModal}
+        watchlists={[{ id: 'personal', name: 'My Watchlist' }, ...watchlists]}
+        onSelect={handleSelectWatchlist}
+        onCancel={() => setShowWatchlistModal(false)}
+      />
+    </>
   );
 }
 

@@ -93,6 +93,13 @@ const _layout = () => {
         }}
       />
       <Tab.Screen
+        name="Shared"
+        component={require('./shared').default}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.person} title="Shared" />,
+        }}
+      />
+      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
