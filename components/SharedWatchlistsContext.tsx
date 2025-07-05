@@ -1,82 +1,84 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { database } from '@/services/appwrite';
+import { getLocalUsername } from '@/services/localUser';
+import * as watchlistsApi from '@/services/watchlists';
 
 export interface Watchlist {
   id: string;
   name: string;
-  movies: any[];
-  members: string[]; // user IDs or names
+  movies_ids: string[];
+  members: string[];
 }
 
 interface SharedWatchlistsContextType {
   watchlists: Watchlist[];
-  addMovieToWatchlist: (watchlistId: string, movie: any) => void;
-}
-
-
-interface InviteToWatchlistFn {
-  (watchlistId: string, user: string): void;
-}
-
-interface SharedWatchlistsContextType {
-  watchlists: Watchlist[];
-  addMovieToWatchlist: (watchlistId: string, movie: any) => void;
-  inviteToWatchlist: InviteToWatchlistFn;
+  addMovieToWatchlist: (watchlistId: string, movieId: string) => Promise<void>;
+  inviteToWatchlist: (watchlistId: string, username: string) => Promise<void>;
+  createWatchlist: (name: string) => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const SharedWatchlistsContext = createContext<SharedWatchlistsContextType | undefined>(undefined);
 
 export const SharedWatchlistsProvider = ({ children }: { children: React.ReactNode }) => {
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
 
-  // Load from AsyncStorage on mount
+  // Load current username
   useEffect(() => {
     (async () => {
-      try {
-        const stored = await AsyncStorage.getItem('sharedWatchlists');
-        if (stored) {
-          setWatchlists(JSON.parse(stored));
-        } else {
-          setWatchlists([
-            { id: '1', name: 'With Chloe', movies: [], members: ['You', 'Chloe'] },
-            { id: '2', name: 'Family Night', movies: [], members: ['You', 'Family'] },
-          ]);
-        }
-      } catch (e) {}
-      setLoaded(true);
+      const username = await getLocalUsername();
+      setCurrentUser(username);
     })();
   }, []);
 
-  // Save to AsyncStorage whenever watchlists changes (after initial load)
-  useEffect(() => {
-    if (loaded) {
-      AsyncStorage.setItem('sharedWatchlists', JSON.stringify(watchlists));
-    }
-  }, [watchlists, loaded]);
+  // Fetch watchlists from Appwrite
+  const fetchWatchlists = useCallback(async () => {
+    if (!currentUser) return;
+    const docs = await watchlistsApi.fetchWatchlists(database, currentUser);
+    setWatchlists(docs.map(doc => ({
+      id: doc.$id,
+      name: doc.name,
+      movies_ids: doc.movies_ids,
+      members: doc.members,
+    })));
+  }, [currentUser]);
 
-  const addMovieToWatchlist = (watchlistId: string, movie: any) => {
-    setWatchlists((prev) =>
-      prev.map((w) =>
-        w.id === watchlistId && !w.movies.some((m) => m.id === movie.id)
-          ? { ...w, movies: [...w.movies, movie] }
-          : w
-      )
-    );
+  useEffect(() => {
+    if (currentUser) fetchWatchlists();
+  }, [currentUser, fetchWatchlists]);
+
+  // Add a movie to a watchlist
+  const addMovieToWatchlist = async (watchlistId: string, movieId: string) => {
+    await watchlistsApi.addMovieToWatchlist(database, watchlistId, movieId);
+    await fetchWatchlists();
   };
 
-  const inviteToWatchlist: InviteToWatchlistFn = (watchlistId, user) => {
-    setWatchlists((prev) =>
-      prev.map((w) =>
-        w.id === watchlistId && !w.members.includes(user)
-          ? { ...w, members: [...w.members, user] }
-          : w
-      )
-    );
+  // Invite a user to a watchlist
+  const inviteToWatchlist = async (watchlistId: string, username: string) => {
+    await watchlistsApi.addMemberToWatchlist(database, watchlistId, username);
+    await fetchWatchlists();
+  };
+
+  // Create a new watchlist
+  const createWatchlist = async (name: string) => {
+    if (!currentUser) return;
+    try {
+      await watchlistsApi.createWatchlist(database, name, currentUser);
+      await fetchWatchlists();
+    } catch (err) {
+      console.error('Create watchlist error:', err);
+      throw err;
+    }
+  };
+
+  // Manual refresh
+  const refresh = async () => {
+    await fetchWatchlists();
   };
 
   return (
-    <SharedWatchlistsContext.Provider value={{ watchlists, addMovieToWatchlist, inviteToWatchlist }}>
+    <SharedWatchlistsContext.Provider value={{ watchlists, addMovieToWatchlist, inviteToWatchlist, createWatchlist, refresh }}>
       {children}
     </SharedWatchlistsContext.Provider>
   );

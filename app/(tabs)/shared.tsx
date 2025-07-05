@@ -3,13 +3,15 @@ import { images } from '@/constants/images';
 import React, { useState } from 'react';
 import { FlatList, Image, Text, View, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 
-// Dummy data for demonstration
-
 import { useSharedWatchlists } from '@/components/SharedWatchlistsContext';
 import { checkUsernameExists } from '@/services/appwrite';
 
 const Shared = () => {
-  const { watchlists, inviteToWatchlist } = useSharedWatchlists();
+  const { watchlists, inviteToWatchlist, addMovieToWatchlist, createWatchlist, refresh } = useSharedWatchlists();
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [newWatchlistName, setNewWatchlistName] = useState('');
+  const [createError, setCreateError] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
   const [selected, setSelected] = useState(watchlists[0]?.id || null);
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [inviteUsername, setInviteUsername] = useState('');
@@ -18,11 +20,29 @@ const Shared = () => {
   const [inviteSuccess, setInviteSuccess] = useState('');
   const currentList = watchlists.find(w => w.id === selected);
 
+  // Update selected when watchlists change
+  React.useEffect(() => {
+    if (watchlists.length > 0 && !selected) {
+      setSelected(watchlists[0].id);
+    }
+    if (selected && !watchlists.find(w => w.id === selected)) {
+      setSelected(watchlists[0]?.id || null);
+    }
+  }, [watchlists]);
+
   return (
     <View className="flex-1 bg-primary">
       <Image source={images.bg} className="absolute w-full z-0" resizeMode="cover" />
       <View className="px-5 pt-10">
-        <Text className="text-white text-2xl font-bold mb-4">Shared Watchlists</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <Text className="text-white text-2xl font-bold mb-4" style={{ flex: 1 }}>Shared Watchlists</Text>
+          <TouchableOpacity
+            onPress={() => { setCreateModalVisible(true); setNewWatchlistName(''); setCreateError(''); }}
+            style={{ backgroundColor: '#FFD700', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 16, marginLeft: 8 }}
+          >
+            <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 16 }}>+ New</Text>
+          </TouchableOpacity>
+        </View>
         <FlatList
           data={watchlists}
           horizontal
@@ -45,6 +65,60 @@ const Shared = () => {
           )}
           style={{ marginBottom: 10 }}
         />
+        {/* Create Watchlist Modal */}
+        <Modal
+          visible={createModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCreateModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)' }}
+          >
+            <View style={{ backgroundColor: '#181A2A', borderRadius: 18, padding: 22, minWidth: 260, maxWidth: 320, alignItems: 'center' }}>
+              <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 18, marginBottom: 10 }}>Create Watchlist</Text>
+              <TextInput
+                value={newWatchlistName}
+                onChangeText={setNewWatchlistName}
+                placeholder="Watchlist name"
+                placeholderTextColor="#888"
+                style={{ backgroundColor: '#222', color: 'white', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, width: 200, marginBottom: 8, borderWidth: 1, borderColor: '#FFD700' }}
+                autoFocus
+              />
+              {createError ? <Text style={{ color: 'red', marginBottom: 6 }}>{createError}</Text> : null}
+              <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!newWatchlistName.trim()) {
+                      setCreateError('Please enter a name.');
+                      return;
+                    }
+                    setCreateLoading(true);
+                    try {
+                      await createWatchlist(newWatchlistName.trim());
+                      setCreateModalVisible(false);
+                    } catch (err) {
+                      setCreateError('Error creating watchlist.');
+                    } finally {
+                      setCreateLoading(false);
+                    }
+                  }}
+                  style={{ backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 6, paddingHorizontal: 18, marginRight: 10, opacity: createLoading ? 0.7 : 1 }}
+                  disabled={createLoading}
+                >
+                  <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 15 }}>{createLoading ? 'Creating...' : 'Create'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setCreateModalVisible(false)}
+                  style={{ backgroundColor: '#222', borderRadius: 10, paddingVertical: 6, paddingHorizontal: 18, borderWidth: 1, borderColor: '#FFD700' }}
+                >
+                  <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 15 }}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 8 }}>
           <Text className="text-white text-lg font-bold mr-3">{currentList?.name || 'No Watchlist Selected'}</Text>
           {currentList && (
@@ -65,10 +139,15 @@ const Shared = () => {
             ))}
           </View>
         )}
+        {/* Movies: You will need to fetch movie details by ID if you want to display more than just IDs */}
         <FlatList
-          data={currentList?.movies || []}
-          renderItem={({ item }) => <MovieCard {...item} />}
-          keyExtractor={item => item.id.toString()}
+          data={currentList?.movies_ids || []}
+          renderItem={({ item }) => (
+            <View style={{ backgroundColor: '#222', borderRadius: 8, padding: 8, margin: 4 }}>
+              <Text style={{ color: '#FFD700', fontSize: 13 }}>Movie ID: {item}</Text>
+            </View>
+          )}
+          keyExtractor={item => item}
           numColumns={3}
           columnWrapperStyle={{ justifyContent: 'flex-start', gap: 20, paddingRight: 5, marginBottom: 10 }}
           className="mt-2"
@@ -123,7 +202,7 @@ const Shared = () => {
                         setInviteLoading(false);
                         return;
                       }
-                      inviteToWatchlist(currentList.id, inviteUsername.trim());
+                      await inviteToWatchlist(currentList.id, inviteUsername.trim());
                       setInviteSuccess('Invitation sent!');
                       setInviteUsername('');
                     } catch (err) {
