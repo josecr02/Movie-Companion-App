@@ -34,11 +34,11 @@ const TabIcon = ({ focused, icon, title }: any) => (
 
 
 import IndexScreen from './index';
+import InTheatresScreen from './intheatres';
+import MatchScreen from './match';
 import ProfileScreen from './profile';
 import SavedScreen from './saved';
 import SearchScreen from './search';
-import InTheatresScreen from './intheatres';
-import MatchScreen from './match';
 import SharedScreen from './shared';
 const Tab = createMaterialTopTabNavigator();
 
@@ -51,7 +51,7 @@ const Layout = () => {
         tabBarShowIcon: true,
         tabBarIndicatorStyle: { backgroundColor: '#FFD700', height: 3 },
         tabBarStyle: {
-          backgroundColor: '#0f0D23',
+          backgroundColor: '#0D1B2A',
           elevation: 0,
           shadowOpacity: 0,
           paddingTop: insets.top,
@@ -83,7 +83,7 @@ const Layout = () => {
         name="InTheatres"
         component={InTheatresScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.tickets} title="In Theatres" />,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.tickets} title="Theaters" />,
         }}
       />
       <Tab.Screen
@@ -104,7 +104,7 @@ const Layout = () => {
         name="Match"
         component={MatchScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.tickets} title="Match!" />,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={icons.tickets} title="Match" />,
         }}
       />
       <Tab.Screen

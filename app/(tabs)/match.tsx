@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { useSharedWatchlists } from '@/components/SharedWatchlistsContext';
+import MovieCard from '@/components/MovieCard';
+import SwipeMovieCard from '@/components/SwipeMovieCard';
 import { database } from '@/services/appwrite';
+import * as infiniteMatchApi from '@/services/infiniteMatch';
 import { getLocalUsername } from '@/services/localUser';
 import * as matchesApi from '@/services/matches';
-import { fetchMoviesByIds } from '@/services/tmdb';
 import { fetchRandomPopularMovieIds } from '@/services/randomMovies';
-import { fetchGenresForMovies, discoverMovieByGenres } from '@/services/smartMatch';
-import MovieCard from '@/components/MovieCard';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Swiper from 'react-native-deck-swiper';
 
-const NUM_MOVIES = 12;
+
+// Infinite mode: number of movies to buffer in the deck at a time
+const MOVIE_DECK_SIZE = 5;
 
 
 const MatchTab = () => {
@@ -21,9 +23,15 @@ const MatchTab = () => {
   const [currentUser, setCurrentUser] = useState<string|null>(null);
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [answeringIndex, setAnsweringIndex] = useState(0);
-  const [answers, setAnswers] = useState<string[]>([]);
+
+  // Infinite swipe state
+  const [deckMovies, setDeckMovies] = useState<any[]>([]); // Movies in the current deck
+  const [deckIndex, setDeckIndex] = useState(0); // Index in the infinite list
+  const [swiping, setSwiping] = useState(false);
   const [resultMovie, setResultMovie] = useState<any>(null);
+  const [sessionId, setSessionId] = useState<string|null>(null); // Infinite match session id
+  const [otherUser, setOtherUser] = useState<string|null>(null);
+  const [matchFound, setMatchFound] = useState(false);
 
   // Load username
   useEffect(() => {
@@ -37,7 +45,7 @@ const MatchTab = () => {
       const m = await matchesApi.getMatch(database, matchId);
       setMatch(m);
       if (m.status === 'active' && step === 'waiting') setStep('matching');
-      if (m.status === 'accept' && step === 'idle') setStep('accept');
+      // Accept step is handled by invite polling below
       if (m.status === 'finished' && step !== 'result') setStep('result');
     }, 2000);
     return () => clearInterval(interval);
@@ -59,16 +67,48 @@ const MatchTab = () => {
     return () => clearInterval(interval);
   }, [currentUser, matchId, step]);
 
-  // When match is active, load movies for this user
+
+  // When match is active, start infinite matchmaking session
   useEffect(() => {
-    if (!match || !currentUser) return;
-    let ids: string[] = [];
-    if (currentUser === match.initiator) ids = match.initiator_movies;
-    else ids = match.invitee_movies;
-    if (ids.length) {
-      fetchMoviesByIds(ids).then(setMovies);
-    }
-  }, [match, currentUser]);
+    if (!match || !currentUser || step !== 'matching') return;
+    // Only start session if not already started
+    if (sessionId) return;
+    // Determine other user
+    const other = currentUser === match.initiator ? match.invitee : match.initiator;
+    setOtherUser(other);
+    // Start or join infinite match session (id = match.$id)
+    (async () => {
+      setLoading(true);
+      try {
+        // Create or join session in Appwrite
+        await infiniteMatchApi.initSession(match.$id, [currentUser, other], match.initiator, match.invitee);
+        setSessionId(match.$id);
+        // Fetch initial deck
+        const movies = await infiniteMatchApi.getMoviesForSession(match.$id, 0, MOVIE_DECK_SIZE);
+        console.log('[DEBUG] getMoviesForSession returned:', movies);
+        setDeckMovies(movies);
+        setDeckIndex(0);
+      } catch (e) {
+        console.log('[DEBUG] Error in matchmaking session:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [match, currentUser, step]);
+
+  // Poll for match found (both swiped right on same movie)
+  useEffect(() => {
+    if (!sessionId || !currentUser || !otherUser || matchFound || step !== 'matching') return;
+    const interval = setInterval(async () => {
+      const matchResult = await infiniteMatchApi.checkForMatch(sessionId);
+      if (matchResult && matchResult.movie) {
+        setResultMovie(matchResult.movie);
+        setMatchFound(true);
+        setStep('result');
+      }
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [sessionId, currentUser, otherUser, matchFound, step]);
 
 
 
@@ -81,14 +121,16 @@ const MatchTab = () => {
     }
     setLoading(true);
     try {
-      // Fetch 12 random movie IDs from TMDb
-      const initiatorIds = await fetchRandomPopularMovieIds(NUM_MOVIES);
-      const matchDoc = await matchesApi.createMatch(database, currentUser, invitee.trim(), initiatorIds);
+      // Create match with empty swipes arrays for infinite mode
+      const matchDoc = await matchesApi.createMatch(database, currentUser, invitee.trim(), []);
+      // Patch: ensure initiator_swipes and invitee_swipes are set for new match
+      await infiniteMatchApi.initSession(matchDoc.$id, [currentUser, invitee.trim()], currentUser, invitee.trim());
       setMatchId(matchDoc.$id);
       setMatch(matchDoc);
       setStep('waiting');
     } catch (err) {
       setInviteError('Could not start match.');
+      console.log('[DEBUG] Error in handleInvite:', err);
     } finally {
       setLoading(false);
     }
@@ -100,7 +142,7 @@ const MatchTab = () => {
     setLoading(true);
     try {
       // Fetch 12 random movie IDs from TMDb for invitee
-      const inviteeIds = await fetchRandomPopularMovieIds(NUM_MOVIES);
+      const inviteeIds = await fetchRandomPopularMovieIds(12);
       await matchesApi.acceptMatch(database, match.$id, inviteeIds);
       setStep('matching');
     } finally {
@@ -108,64 +150,31 @@ const MatchTab = () => {
     }
   };
 
-  // Submit answer for current movie
-  const handleAnswer = async (answer: string) => {
-    if (!match || !currentUser) return;
-    setLoading(true);
+
+  // Handle swipe (right = want to watch, left = not interested)
+  const handleSwipe = async (cardIndex: number, direction: 'right' | 'left') => {
+    if (!sessionId || !currentUser || !deckMovies[cardIndex] || !match) return;
+    setSwiping(true);
     try {
-      await matchesApi.submitAnswer(database, match.$id, currentUser, answer);
-      setAnswers([...answers, answer]);
-      setAnsweringIndex(answeringIndex + 1);
-      // If last movie, wait for both users to finish
-      if (answeringIndex + 1 === NUM_MOVIES) {
-        // Poll for both users' answers
-        let done = false;
-        let resultMovieId = null;
-        while (!done) {
-          const updatedMatch = await matchesApi.getMatch(database, match.$id);
-          const initiatorDone = updatedMatch.initiator_answers.length === NUM_MOVIES;
-          const inviteeDone = updatedMatch.invitee_answers.length === NUM_MOVIES;
-          // Only proceed if both finished
-          if (initiatorDone && inviteeDone) {
-            // Smart match: find a new movie by genre profile
-            const initiatorLikes = updatedMatch.initiator_answers.map((a, i) => (a === 'love' || a === 'like') ? updatedMatch.initiator_movies[i] : null).filter(Boolean) as string[];
-            const inviteeLikes = updatedMatch.invitee_answers.map((a, i) => (a === 'love' || a === 'like') ? updatedMatch.invitee_movies[i] : null).filter(Boolean) as string[];
-            const allLiked = Array.from(new Set([...initiatorLikes, ...inviteeLikes]));
-            // Get top genres from liked movies
-            let genres: number[] = [];
-            if (allLiked.length > 0) {
-              genres = await fetchGenresForMovies(allLiked);
-            }
-            // Exclude all movies shown in this session
-            const excludeIds = Array.from(new Set([
-              ...updatedMatch.initiator_movies,
-              ...updatedMatch.invitee_movies
-            ]));
-            // Discover a new movie by genres
-            let smartMatch: any = null;
-            if (genres.length > 0) {
-              smartMatch = await discoverMovieByGenres(genres, excludeIds);
-            }
-            // Fallback: pick any liked movie, or any shown movie
-            resultMovieId = smartMatch?.id?.toString() || initiatorLikes[0] || inviteeLikes[0] || updatedMatch.initiator_movies[0];
-            await matchesApi.finishMatch(database, match.$id, resultMovieId);
-            done = true;
-            // Set result movie
-            if (smartMatch) {
-              setResultMovie(smartMatch);
-            } else {
-              const movieObj = movies.find(m => m.id.toString() === resultMovieId) || movies[0];
-              setResultMovie(movieObj);
-            }
-            setStep('result');
-          } else {
-            // Wait and poll again
-            await new Promise(res => setTimeout(res, 1500));
-          }
-        }
+      const movie = deckMovies[cardIndex];
+      await infiniteMatchApi.submitSwipe(
+        database,
+        sessionId,
+        currentUser,
+        movie.id,
+        direction,
+        match.initiator,
+        match.invitee
+      );
+      // If deck is running low, fetch more
+      if (cardIndex + 1 >= deckMovies.length - 2) {
+        const nextIndex = deckIndex + deckMovies.length;
+        const moreMovies = await infiniteMatchApi.getMoviesForSession(sessionId, nextIndex, MOVIE_DECK_SIZE);
+        setDeckMovies(prev => [...prev, ...moreMovies]);
       }
+      setDeckIndex(deckIndex + 1);
     } finally {
-      setLoading(false);
+      setSwiping(false);
     }
   };
 
@@ -206,35 +215,58 @@ const MatchTab = () => {
       </View>
     );
   }
-  if (step === 'matching' && movies.length > 0) {
-    const movie = movies[answeringIndex];
-    // If finished, show waiting screen
-    if (answeringIndex >= NUM_MOVIES) {
+  if (step === 'matching') {
+    if (loading) {
       return (
         <View style={{ flex: 1, backgroundColor: '#181A2A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 20, marginBottom: 10 }}>Waiting for your match...</Text>
           <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 18, marginTop: 18 }}>Loading movies...</Text>
+        </View>
+      );
+    }
+    if (!deckMovies || deckMovies.length === 0) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#181A2A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ color: 'red', fontWeight: 'bold', fontSize: 18 }}>No movies found. Please try again later.</Text>
         </View>
       );
     }
     return (
       <View style={{ flex: 1, backgroundColor: '#181A2A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 20, marginBottom: 10 }}>Movie {answeringIndex + 1} of {NUM_MOVIES}</Text>
-        <MovieCard {...movie} />
-        <View style={{ flexDirection: 'row', marginTop: 18, gap: 10 }}>
-          <TouchableOpacity onPress={() => handleAnswer('love')} style={{ backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18, marginRight: 6 }}>
-            <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 16 }}>I Love</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleAnswer('like')} style={{ backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18, marginRight: 6 }}>
-            <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 16 }}>I Like</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleAnswer('dislike')} style={{ backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18, marginRight: 6 }}>
-            <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 16 }}>I Don't Like</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleAnswer('not_watched')} style={{ backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18 }}>
-            <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 16 }}>Not Watched</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 20, marginBottom: 10 }}>Swipe to Match!</Text>
+        <Swiper
+          cards={deckMovies}
+          cardIndex={deckIndex}
+          renderCard={movie => <SwipeMovieCard {...movie} />}
+          onSwipedRight={i => handleSwipe(i, 'right')}
+          onSwipedLeft={i => handleSwipe(i, 'left')}
+          stackSize={3}
+          backgroundColor="transparent"
+          disableTopSwipe
+          disableBottomSwipe
+          animateCardOpacity
+          cardVerticalMargin={30}
+          overlayLabels={{
+            left: {
+              title: 'Nope',
+              style: {
+                label: { backgroundColor: '#FFD700', color: '#222', fontSize: 24, borderRadius: 8, padding: 8 },
+                wrapper: { flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-start', marginTop: 30, marginLeft: -30 }
+              }
+            },
+            right: {
+              title: 'Want to Watch',
+              style: {
+                label: { backgroundColor: '#FFD700', color: '#222', fontSize: 24, borderRadius: 8, padding: 8 },
+                wrapper: { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', marginTop: 30, marginLeft: 30 }
+              }
+            }
+          }}
+          disableLeftSwipe={swiping}
+          disableRightSwipe={swiping}
+        />
+        <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 16, marginTop: 18 }}>Swipe right if you want to watch, left to skip. When you both swipe right on the same movie, you'll match!</Text>
+        {loading && <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 20 }} />}
       </View>
     );
   }
@@ -255,8 +287,11 @@ const MatchTab = () => {
             setMatch(null);
             setMovies([]);
             setLoading(false);
-            setAnsweringIndex(0);
-            setAnswers([]);
+            setDeckIndex(0);
+            setDeckMovies([]);
+            setSessionId(null);
+            setOtherUser(null);
+            setMatchFound(false);
             setResultMovie(null);
           }}
         >
